@@ -23,17 +23,13 @@ Requirements:
 import sys
 import json
 from pathlib import Path
-import requests
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pageindex import PageIndexClient
 import pageindex.utils as utils
 
-PDF_URL = "https://arxiv.org/pdf/2603.15031"
-
 _EXAMPLES_DIR = Path(__file__).parent
-PDF_PATH = _EXAMPLES_DIR / "documents" / "attention-residuals.pdf"
+PDF_PATH = _EXAMPLES_DIR / "final-fy26-defense-minibus-4-summary.pdf"
 WORKSPACE = _EXAMPLES_DIR / "workspace"
 
 AGENT_SYSTEM_PROMPT = """
@@ -132,17 +128,10 @@ def query_agent(
 
 
 if __name__ == "__main__":
-    # Download PDF if needed
+    # Verify PDF exists
     if not PDF_PATH.exists():
-        print(f"Downloading {PDF_URL} ...")
-        PDF_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with requests.get(PDF_URL, stream=True, timeout=30) as r:
-            r.raise_for_status()
-            with open(PDF_PATH, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-        print("Download complete.\n")
+        print(f"ERROR: PDF not found at {PDF_PATH}")
+        sys.exit(1)
 
     # Setup
     client = PageIndexClient(workspace=WORKSPACE)
@@ -179,6 +168,6 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("Step 3: Agent Query (Bedrock Converse tool-use)")
     print("=" * 60)
-    question = "Explain Attention Residuals in simple language."
+    question = "Provide a top-10 list of the biggest funding areas supported by H.R. 7148."
     print(f"\nQuestion: '{question}'")
     query_agent(client, doc_id, question, verbose=True)
