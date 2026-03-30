@@ -29,15 +29,17 @@ from pageindex import PageIndexClient
 import pageindex.utils as utils
 
 _EXAMPLES_DIR = Path(__file__).parent
-PDF_PATH = _EXAMPLES_DIR / "documents" / "final-fy26-defense-minibus-4-summary.pdf"
+DOC_PATH = _EXAMPLES_DIR / "documents" / "BILLS-119hr7148enr.md"
 WORKSPACE = _EXAMPLES_DIR / "workspace"
 
 AGENT_SYSTEM_PROMPT = """
 You are PageIndex, a document QA assistant powered by AWS Bedrock.
 TOOL USE:
 - Call get_document() first to confirm status and page/line count.
-- Call get_document_structure() to identify relevant page ranges.
-- Call get_page_content(pages="5-7") with tight ranges; never fetch the whole document.
+- Call get_document_structure() to get the top-level outline (depth=1). Each node has a node_id and may have a child_count.
+- Call get_section_detail(node_id="0015") to drill into a section's children. Use depth to control how many levels deep.
+- Call get_page_content(pages="5-7") with tight ranges; never fetch the whole document. For Markdown documents, use line numbers from the structure's line_num field.
+- Navigate the tree: structure first (top-level), then drill into relevant sections, then fetch page content.
 - Before each tool call, output one short sentence explaining the reason.
 Answer based only on tool output. Be concise.
 """
@@ -57,12 +59,37 @@ TOOL_SPECS = [
     },
     {
         "name": "get_document_structure",
-        "description": "Get the document's full tree structure (without text) to find relevant sections.",
+        "description": "Get the document's tree structure outline. Returns top-level nodes with node_id, title, summary, and child_count. Use this first to understand the document layout, then drill into sections with get_section_detail.",
         "inputSchema": {
             "json": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "depth": {
+                        "type": "integer",
+                        "description": "How many levels deep to return. Default 1 (top-level only). Use 2 to also see immediate children.",
+                    }
+                },
                 "required": [],
+            }
+        },
+    },
+    {
+        "name": "get_section_detail",
+        "description": "Get the subtree of a specific section by node_id. Returns the node and its children. Use this to drill into a section found via get_document_structure.",
+        "inputSchema": {
+            "json": {
+                "type": "object",
+                "properties": {
+                    "node_id": {
+                        "type": "string",
+                        "description": "The node_id to drill into, e.g. '0015'",
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "How many levels of children to include. Default 1.",
+                    },
+                },
+                "required": ["node_id"],
             }
         },
     },
@@ -98,7 +125,13 @@ def query_agent(
         return client.get_document(doc_id)
 
     def handle_get_document_structure(input_dict):
-        return client.get_document_structure(doc_id)
+        depth = input_dict.get("depth", 1)
+        return client.get_document_structure(doc_id, depth=depth)
+
+    def handle_get_section_detail(input_dict):
+        node_id = input_dict.get("node_id")
+        depth = input_dict.get("depth", 1)
+        return client.get_section_detail(doc_id, node_id, depth=depth)
 
     def handle_get_page_content(input_dict):
         pages = input_dict.get("pages", "1")
@@ -107,6 +140,7 @@ def query_agent(
     tool_handlers = {
         "get_document": handle_get_document,
         "get_document_structure": handle_get_document_structure,
+        "get_section_detail": handle_get_section_detail,
         "get_page_content": handle_get_page_content,
     }
 
@@ -120,7 +154,7 @@ def query_agent(
         tools=TOOL_SPECS,
         tool_handlers=tool_handlers,
         system=system,
-        max_turns=10,
+        max_turns=20,
     )
 
     print(f"\n[answer]: {answer}")
@@ -128,33 +162,34 @@ def query_agent(
 
 
 if __name__ == "__main__":
-    # Verify PDF exists
-    if not PDF_PATH.exists():
-        print(f"ERROR: PDF not found at {PDF_PATH}")
+    # Verify doc exists
+    if not DOC_PATH.exists():
+        print(f"ERROR: Document not found at {DOC_PATH}")
         sys.exit(1)
 
     # Setup
     client = PageIndexClient(workspace=WORKSPACE)
 
-    # Step 1: Index PDF and view tree structure
+    # Step 1: Load or index document and view tree structure
     print("=" * 60)
-    print("Step 1: Index PDF and view tree structure")
+    print("Step 1: Load document and view tree structure")
     print("=" * 60)
+    doc_name = DOC_PATH.stem
     doc_id = next(
         (
             did
             for did, doc in client.documents.items()
-            if doc.get("doc_name") == PDF_PATH.name
+            if doc.get("doc_name") == doc_name
         ),
         None,
     )
     if doc_id:
         print(f"\nLoaded cached doc_id: {doc_id}")
     else:
-        doc_id = client.index(PDF_PATH)
+        doc_id = client.index(DOC_PATH)
         print(f"\nIndexed. doc_id: {doc_id}")
     print("\nTree Structure (top-level sections):")
-    structure = json.loads(client.get_document_structure(doc_id))
+    structure = json.loads(client.get_document_structure(doc_id, depth=1))
     utils.print_tree(structure)
 
     # Step 2: View document metadata

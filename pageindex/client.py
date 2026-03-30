@@ -9,7 +9,7 @@ import PyPDF2
 
 from .page_index import page_index
 from .page_index_md import md_to_tree
-from .retrieve import get_document, get_document_structure, get_page_content
+from .retrieve import get_document, get_document_structure, get_page_content, get_section_detail
 from .utils import ConfigLoader, remove_fields
 
 META_INDEX = "_meta.json"
@@ -197,10 +197,15 @@ class PageIndexClient:
     def get_document(self, doc_id: str) -> str:
         return get_document(self.documents, doc_id)
 
-    def get_document_structure(self, doc_id: str) -> str:
+    def get_document_structure(self, doc_id: str, depth: int = None) -> str:
         if self.workspace:
             self._ensure_doc_loaded(doc_id)
-        return get_document_structure(self.documents, doc_id)
+        return get_document_structure(self.documents, doc_id, depth=depth)
+
+    def get_section_detail(self, doc_id: str, node_id: str, depth: int = 1) -> str:
+        if self.workspace:
+            self._ensure_doc_loaded(doc_id)
+        return get_section_detail(self.documents, doc_id, node_id, depth=depth)
 
     def get_page_content(self, doc_id: str, pages: str) -> str:
         if self.workspace:

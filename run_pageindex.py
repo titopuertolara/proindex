@@ -140,7 +140,7 @@ if __name__ == "__main__":
             "if_add_node_text": args.if_add_node_text,
             "if_add_node_id": args.if_add_node_id,
         }
-        opt = config_loader.load(user_opt)
+        opt = config_loader.load({k: v for k, v in user_opt.items() if v is not None})
 
         toc_with_page_number = asyncio.run(
             md_to_tree(
