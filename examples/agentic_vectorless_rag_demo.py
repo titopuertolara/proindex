@@ -29,7 +29,7 @@ from pageindex import PageIndexClient
 import pageindex.utils as utils
 
 _EXAMPLES_DIR = Path(__file__).parent
-PDF_PATH = _EXAMPLES_DIR / "final-fy26-defense-minibus-4-summary.pdf"
+PDF_PATH = _EXAMPLES_DIR / "documents" / "final-fy26-defense-minibus-4-summary.pdf"
 WORKSPACE = _EXAMPLES_DIR / "workspace"
 
 AGENT_SYSTEM_PROMPT = """
