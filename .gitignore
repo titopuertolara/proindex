@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+logs/
+results/
+examples/workspace/
+examples/documents/*.pdf
+*.egg-info/
+dist/
+build/
