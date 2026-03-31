@@ -678,12 +678,12 @@ def add_node_text_with_labels(node, pdf_pages):
             add_node_text_with_labels(node[index], pdf_pages)
 
 
-async def generate_node_summary(node, model=None):
-    prompt = f"""You are given a part of a document, your task is to generate a description of the partial document about what are main points covered in the partial document.
+async def generate_node_summary(node, model=None, max_chars=500):
+    prompt = f"""You are given a part of a document. Generate a concise summary of the main points covered. The summary MUST be shorter than {max_chars} characters.
 
     Partial Document Text: {node['text']}
 
-    Directly return the description, do not include any other text.
+    Directly return the summary, do not include any other text. Keep it concise.
     """
     response = await llm_acompletion(model, prompt)
     return response
