@@ -1,4 +1,5 @@
 import json
+import os
 import PyPDF2
 
 try:
@@ -51,22 +52,21 @@ def _get_pdf_page_content(doc_info: dict, page_nums: list[int]) -> list[dict]:
 
 
 def _get_md_page_content(doc_info: dict, page_nums: list[int]) -> list[dict]:
+    """Read markdown content by line numbers directly from the source file."""
+    md_path = doc_info.get("path")
+    if not md_path or not os.path.isfile(md_path):
+        return [{"error": f"Markdown file not found: {md_path}"}]
+
+    with open(md_path, "r", encoding="utf-8") as f:
+        all_lines = f.readlines()
+
     min_line, max_line = min(page_nums), max(page_nums)
-    results = []
-    seen = set()
+    # Clamp to file bounds
+    min_line = max(1, min_line)
+    max_line = min(len(all_lines), max_line)
 
-    def _traverse(nodes):
-        for node in nodes:
-            ln = node.get("line_num")
-            if ln and min_line <= ln <= max_line and ln not in seen:
-                seen.add(ln)
-                results.append({"page": ln, "content": node.get("text", "")})
-            if node.get("nodes"):
-                _traverse(node["nodes"])
-
-    _traverse(doc_info.get("structure", []))
-    results.sort(key=lambda x: x["page"])
-    return results
+    content = "".join(all_lines[min_line - 1 : max_line])
+    return [{"line_start": min_line, "line_end": max_line, "content": content}]
 
 
 # -- Tool functions -----------------------------------------------------------

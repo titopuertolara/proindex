@@ -1,4 +1,5 @@
 import boto3
+import botocore.config
 import logging
 import os
 import textwrap
@@ -32,7 +33,14 @@ def _get_bedrock_client(region: str = None):
     global _bedrock_client, _bedrock_region
     region = region or os.getenv("AWS_DEFAULT_REGION", "us-east-1")
     if _bedrock_client is None or region != _bedrock_region:
-        _bedrock_client = boto3.client("bedrock-runtime", region_name=region)
+        boto_config = botocore.config.Config(
+            read_timeout=300,
+            connect_timeout=10,
+            retries={"max_attempts": 10, "mode": "adaptive"},
+        )
+        _bedrock_client = boto3.client(
+            "bedrock-runtime", region_name=region, config=boto_config
+        )
         _bedrock_region = region
     return _bedrock_client
 
@@ -146,7 +154,16 @@ def llm_converse_with_tools(model, messages, tools, tool_handlers, system=None, 
         if system:
             kwargs["system"] = system
 
-        response = client.converse(**kwargs)
+        for attempt in range(5):
+            try:
+                response = client.converse(**kwargs)
+                break
+            except client.exceptions.ThrottlingException:
+                wait = 2 ** attempt
+                logging.warning(f"Throttled, retrying in {wait}s...")
+                time.sleep(wait)
+        else:
+            raise RuntimeError("Max retries exceeded due to throttling")
         assistant_msg = response["output"]["message"]
         messages.append(assistant_msg)
 
