@@ -9,13 +9,8 @@ except ImportError:
     from utils import *
 
 
-async def get_node_summary(node, summary_token_threshold=200, model=None):
-    node_text = node.get("text")
-    num_tokens = count_tokens(node_text, model=model)
-    if num_tokens < summary_token_threshold:
-        return node_text
-    else:
-        return await generate_node_summary(node, model=model)
+async def get_node_summary(node, summary_token_threshold=200, model=None, max_summary_chars=500):
+    return await generate_node_summary(node, model=model, max_chars=max_summary_chars)
 
 
 async def generate_summaries_for_structure_md(

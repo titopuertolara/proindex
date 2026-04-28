@@ -1,4 +1,5 @@
 import json
+import os
 import PyPDF2
 
 try:
@@ -51,22 +52,21 @@ def _get_pdf_page_content(doc_info: dict, page_nums: list[int]) -> list[dict]:
 
 
 def _get_md_page_content(doc_info: dict, page_nums: list[int]) -> list[dict]:
+    """Read markdown content by line numbers directly from the source file."""
+    md_path = doc_info.get("path")
+    if not md_path or not os.path.isfile(md_path):
+        return [{"error": f"Markdown file not found: {md_path}"}]
+
+    with open(md_path, "r", encoding="utf-8") as f:
+        all_lines = f.readlines()
+
     min_line, max_line = min(page_nums), max(page_nums)
-    results = []
-    seen = set()
+    # Clamp to file bounds
+    min_line = max(1, min_line)
+    max_line = min(len(all_lines), max_line)
 
-    def _traverse(nodes):
-        for node in nodes:
-            ln = node.get("line_num")
-            if ln and min_line <= ln <= max_line and ln not in seen:
-                seen.add(ln)
-                results.append({"page": ln, "content": node.get("text", "")})
-            if node.get("nodes"):
-                _traverse(node["nodes"])
-
-    _traverse(doc_info.get("structure", []))
-    results.sort(key=lambda x: x["page"])
-    return results
+    content = "".join(all_lines[min_line - 1 : max_line])
+    return [{"line_start": min_line, "line_end": max_line, "content": content}]
 
 
 # -- Tool functions -----------------------------------------------------------
@@ -89,13 +89,57 @@ def get_document(documents: dict, doc_id: str) -> str:
     return json.dumps(result)
 
 
-def get_document_structure(documents: dict, doc_id: str) -> str:
+def get_document_structure(documents: dict, doc_id: str, depth: int = None) -> str:
     doc_info = documents.get(doc_id)
     if not doc_info:
         return json.dumps({"error": f"Document {doc_id} not found"})
     structure = doc_info.get("structure", [])
     structure_no_text = remove_fields(structure, fields=["text"])
+    if depth is not None:
+        structure_no_text = _truncate_depth(structure_no_text, depth)
     return json.dumps(structure_no_text, ensure_ascii=False)
+
+
+def _truncate_depth(nodes: list, max_depth: int, current: int = 1) -> list:
+    """Return tree truncated to max_depth, replacing children with a count."""
+    result = []
+    for node in nodes:
+        shallow = {k: v for k, v in node.items() if k != "nodes"}
+        children = node.get("nodes", [])
+        if current < max_depth and children:
+            shallow["nodes"] = _truncate_depth(children, max_depth, current + 1)
+        elif children:
+            shallow["child_count"] = len(children)
+        result.append(shallow)
+    return result
+
+
+def _find_node(nodes: list, node_id: str):
+    """Find a node by node_id in a tree structure."""
+    for node in nodes:
+        if node.get("node_id") == node_id:
+            return node
+        children = node.get("nodes", [])
+        if children:
+            found = _find_node(children, node_id)
+            if found:
+                return found
+    return None
+
+
+def get_section_detail(documents: dict, doc_id: str, node_id: str, depth: int = 1) -> str:
+    doc_info = documents.get(doc_id)
+    if not doc_info:
+        return json.dumps({"error": f"Document {doc_id} not found"})
+    structure = doc_info.get("structure", [])
+    node = _find_node(structure, node_id)
+    if not node:
+        return json.dumps({"error": f"Node {node_id} not found"})
+    node_no_text = remove_fields([node], fields=["text"])[0]
+    children = node_no_text.get("nodes", [])
+    if children:
+        node_no_text["nodes"] = _truncate_depth(children, depth)
+    return json.dumps(node_no_text, ensure_ascii=False)
 
 
 def get_page_content(documents: dict, doc_id: str, pages: str) -> str:
